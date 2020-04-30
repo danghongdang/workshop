@@ -1,4 +1,4 @@
-// Generated from /Users/zhanghongzhang/Develop/workshop20200415-master/sharding-parser/src/main/antlr4/imports/Symbol.g4 by ANTLR 4.8
+// Generated from /Users/zhanghongzhang/Develop/workshop/sharding-parser/src/main/antlr4/imports/Symbol.g4 by ANTLR 4.8
 import org.antlr.v4.runtime.Lexer;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.Token;

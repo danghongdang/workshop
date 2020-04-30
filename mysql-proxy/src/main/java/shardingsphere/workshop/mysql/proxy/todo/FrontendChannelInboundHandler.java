@@ -110,55 +110,12 @@ public final class FrontendChannelInboundHandler extends ChannelInboundHandlerAd
         ASTNode astNode = ParseEngine.parse(sql);
         if (astNode instanceof InsertStatement) {
             InsertStatement insertStatement = (InsertStatement) astNode;
-            LOGGER.info("table name : {}", insertStatement.getTableNameSegment().getIdentifier().getValue());
-            LOGGER.info("column name : {}", insertStatement.getColumnNamesSegment().getColumnNameSegmentList());
-            LOGGER.info("values name : {}", insertStatement.getTableNameSegment().getIdentifier());
+            new InsertCommandExecutor().executor(insertStatement, context);
             context.write(new MySQLOkPacket(1));
             context.flush();
         } else if (astNode instanceof SelectStatement) {
             SelectStatement selectStatement = (SelectStatement) astNode;
-            // 选table
-            String tableName = selectStatement.getTableNameSegment().getIdentifier().getValue();
-            List<CSVRecord> csvRecords;
-            try {
-                csvRecords = readCsv(tableName);
-            } catch (IOException e) {
-                throw new SQLParsingException(String.format("table `%s` not exists", selectStatement.getTableNameSegment().getIdentifier().getValue()));
-            }
-            // 过滤行 where
-            Map<String, String> whereMap = Maps.newHashMap();
-            Iterator<WhereColumnNameSegment> nameIt = selectStatement.getWhereColumnNameAndValuesSegment().getWhereColumnNameSegmentList().iterator();
-            Iterator<WhereColumnValueSegment> valueIt = selectStatement.getWhereColumnNameAndValuesSegment().getWhereColumnValueSegmentList().iterator();
-            while (nameIt.hasNext() && valueIt.hasNext()) {
-                WhereColumnNameSegment columnNameSegment = nameIt.next();
-                WhereColumnValueSegment columnValueSegment = valueIt.next();
-                whereMap.put(columnNameSegment.getIdentifier().getValue(), columnValueSegment.getIdentifier().getValue());
-            }
-
-            List<CSVRecord> filteredRecord = readWhereValue(whereMap, csvRecords);
-            // 过滤列名
-            List<String> columnNameList = Lists.newArrayList();
-            for (ColumnNameSegment columnNameSegment : selectStatement.getSelectColumnNamesSegment().getColumnNameSegmentList()) {
-                columnNameList.add(columnNameSegment.getIdentifier().getValue());
-            }
-            List<List<Object>> resultList = readColumnValue(columnNameList, filteredRecord);
-            Map<String, String> propertyMap = readColumnProperty(columnNameList, filteredRecord.get(0));
-            // 组装mysql 协议
-            int sequenceNo = 1;
-            context.write(new MySQLFieldCountPacket(sequenceNo, columnNameList.size()));
-            for (String name : columnNameList) {
-                sequenceNo ++;
-                String property = propertyMap.get(name);
-                context.write(new MySQLColumnDefinition41Packet(sequenceNo, 0, "sharding_db", "t_order",
-                        "t_order", name, name, 100, getType(property),0));
-            }
-            context.write(new MySQLEofPacket(++sequenceNo));
-            for (List<Object> list : resultList) {
-                sequenceNo ++;
-                context.write(new MySQLTextResultSetRowPacket(sequenceNo, list));
-            }
-            context.write(new MySQLEofPacket(++sequenceNo));
-            context.flush();
+            new SelectCommandExecutor().executor(selectStatement, context);
         } else if (astNode instanceof UpdateStatement) {
             LOGGER.info("unsupported sql grammar!");
             UpdateStatement updateStatement = (UpdateStatement) astNode;
@@ -199,14 +156,12 @@ public final class FrontendChannelInboundHandler extends ChannelInboundHandlerAd
             return csvRecords;
         }
         CSVRecord head = csvRecords.get(0);
-        List<Integer> readColumnIndexList = Lists.newArrayList();
         int index = 0;
         Map<Integer, String> indexWhereMap = Maps.newHashMap();
         for (String str : head) {
             List<String> list = Lists.newArrayList(SPLITTER.split(str));
             for (Map.Entry<String, String> entry : whereMap.entrySet()) {
                 if (entry.getKey().equalsIgnoreCase(list.get(0))) {
-                    readColumnIndexList.add(index);
                     indexWhereMap.put(index, entry.getValue());
                 }
             }
